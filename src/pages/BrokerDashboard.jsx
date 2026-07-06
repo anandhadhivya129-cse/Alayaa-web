@@ -12,6 +12,8 @@ import {
   Trash2,
   Upload,
   MapPin,
+  Menu,
+  X,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import ProfileEditor from '../components/ProfileEditor.jsx'
@@ -20,6 +22,7 @@ import {
   createProperty,
   deleteProperty,
   fetchBrokerDashboard,
+  replyToEnquiry,
   updateProperty,
   uploadPropertyImages,
 } from '../services/api.jsx'
@@ -52,6 +55,7 @@ export default function BrokerDashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [tab, setTab] = useState('overview')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [dashboard, setDashboard] = useState({
     properties: [],
@@ -66,6 +70,8 @@ export default function BrokerDashboard() {
   const [fileList, setFileList] = useState([])
   const [query, setQuery] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [replyDrafts, setReplyDrafts] = useState({})
+  const [replyingId, setReplyingId] = useState('')
 
   const approvalStatus =
     dashboard.approval?.status || user?.profile?.brokerApproval?.status || 'pending'
@@ -185,35 +191,110 @@ export default function BrokerDashboard() {
     }
   }
 
+  const handleReply = async (enquiry) => {
+    const message = (replyDrafts[enquiry.id] || '').trim()
+    if (!message) {
+      setToast('Write a reply message before sending.')
+      return
+    }
+    setReplyingId(enquiry.id)
+    try {
+      await replyToEnquiry(enquiry.id, message, {
+        customer_email: enquiry.customer?.email || '',
+        customer_name: enquiry.customer?.full_name || '',
+        broker_name: user?.profile?.full_name || 'Your broker',
+        property_title: enquiry.property?.title || '',
+      })
+      const refreshed = await fetchBrokerDashboard(user.id)
+      setDashboard(refreshed)
+      setReplyDrafts((current) => ({ ...current, [enquiry.id]: '' }))
+      setToast('Reply sent to customer.')
+    } catch (error) {
+      setToast(error.message)
+    } finally {
+      setReplyingId('')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#FAF9F6]">
-      <aside className="fixed left-0 top-0 hidden h-full w-64 border-r border-[#E5E7EB] bg-white p-5 lg:flex lg:flex-col">
-        <Link to="/" className="mb-10 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F766E] font-extrabold text-white">
-            B
-          </div>
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B7280]">Broker</div>
-            <div className="text-xl font-extrabold text-[#134E4A]">ALAYAA</div>
-          </div>
+      {/* Mobile top bar with hamburger toggle (hidden on lg and up) */}
+      <div className="sticky top-0 z-40 flex items-center justify-between border-b border-[#E5E7EB] bg-white px-4 py-3 lg:hidden">
+        <Link to="/" className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0F766E] font-extrabold text-white">B</div>
+          <span className="text-lg font-extrabold text-[#134E4A]">ALAYAA</span>
         </Link>
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#E5E7EB] text-[#1F2937]"
+          aria-label="Open menu"
+        >
+          <Menu size={20} />
+        </button>
+      </div>
+
+      {/* Backdrop shown only when mobile drawer is open */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`fixed left-0 top-0 z-50 flex h-full w-64 -translate-x-full flex-col border-r border-[#E5E7EB] bg-white p-5 transition-transform duration-200 lg:translate-x-0 lg:flex ${
+          sidebarOpen ? 'translate-x-0' : ''
+        }`}
+      >
+        <div className="mb-10 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F766E] font-extrabold text-white">
+              B
+            </div>
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B7280]">Broker</div>
+              <div className="text-xl font-extrabold text-[#134E4A]">ALAYAA</div>
+            </div>
+          </Link>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-[#6B7280] hover:bg-[#F8F8F7] lg:hidden"
+            aria-label="Close menu"
+          >
+            <X size={18} />
+          </button>
+        </div>
         <nav className="flex-1 space-y-2">
           {[
-            ['overview', 'Overview', Building2],
-            ['properties', 'Properties', Plus],
-            ['enquiries', 'Enquiries', MessageSquare],
-            ['profile', 'Profile', User],
-          ].map(([id, label, Icon]) => (
+            ['overview', 'Overview', Building2, 0],
+            ['properties', 'Properties', Plus, 0],
+            ['enquiries', 'Enquiries', MessageSquare, dashboard.stats.pendingEnquiries],
+            ['profile', 'Profile', User, 0],
+          ].map(([id, label, Icon, badgeCount]) => (
             <button
               key={id}
-              onClick={() => setTab(id)}
-              className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold transition ${
+              onClick={() => {
+                setTab(id)
+                setSidebarOpen(false)
+              }}
+              className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-sm font-bold transition ${
                 tab === id
                   ? 'bg-[#0F766E] text-white'
                   : 'text-[#6B7280] hover:bg-[#F0FAF8] hover:text-[#0F766E]'
               }`}
             >
-              <Icon size={17} /> {label}
+              <span className="flex items-center gap-3">
+                <Icon size={17} /> {label}
+              </span>
+              {badgeCount > 0 ? (
+                <span
+                  className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold ${
+                    tab === id ? 'bg-white text-[#0F766E]' : 'bg-rose-500 text-white'
+                  }`}
+                >
+                  {badgeCount > 99 ? '99+' : badgeCount}
+                </span>
+              ) : null}
             </button>
           ))}
         </nav>
@@ -276,7 +357,7 @@ export default function BrokerDashboard() {
                               {item.property?.location || item.property?.city || ''}
                             </div>
                           </div>
-                          <StatusPill>{item.status}</StatusPill>
+                          <StatusPill status={item.status}>{item.status}</StatusPill>
                         </div>
                         <p className="mt-4 text-sm leading-6 text-[#6B7280]">{item.message}</p>
                       </div>
@@ -496,7 +577,7 @@ export default function BrokerDashboard() {
                               {property.location}, {property.city}
                             </div>
                           </div>
-                          <StatusPill>{property.status}</StatusPill>
+                          <StatusPill status={property.status}>{property.status}</StatusPill>
                         </div>
                         <div className="mt-3 text-sm leading-6 text-[#6B7280]">{property.description}</div>
                         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -535,7 +616,7 @@ export default function BrokerDashboard() {
             <section className="surface rounded-[28px] p-6 sm:p-8">
               <h2 className="text-2xl font-extrabold text-[#1F2937]">Incoming enquiries</h2>
               <p className="mt-1 text-sm text-[#6B7280]">Customer messages attached to your listings.</p>
-              <div className="mt-6 space-y-3">
+              <div className="mt-6 space-y-4">
                 {dashboard.enquiries.length ? (
                   dashboard.enquiries.map((item) => (
                     <div key={item.id} className="rounded-3xl border border-[#E5E7EB] bg-white p-5">
@@ -544,11 +625,45 @@ export default function BrokerDashboard() {
                           <div className="font-extrabold text-[#1F2937]">
                             {item.property?.title || 'Property enquiry'}
                           </div>
-                          <div className="mt-1 text-sm text-[#6B7280]">{item.property?.city || ''}</div>
+                          <div className="mt-1 text-sm text-[#6B7280]">
+                            {item.customer?.full_name || 'Customer'}
+                            {item.customer?.email ? ` · ${item.customer.email}` : ''}
+                          </div>
                         </div>
-                        <StatusPill>{item.status}</StatusPill>
+                        <StatusPill status={item.status}>{item.status}</StatusPill>
                       </div>
                       <p className="mt-4 text-sm leading-6 text-[#6B7280]">{item.message}</p>
+
+                      {item.reply_message ? (
+                        <div className="mt-4 rounded-2xl bg-[#F0FAF8] p-4">
+                          <div className="text-xs font-bold uppercase tracking-wide text-[#0F766E]">Your reply</div>
+                          <p className="mt-1 text-sm leading-6 text-[#134E4A]">{item.reply_message}</p>
+                        </div>
+                      ) : null}
+
+                      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                        <textarea
+                          className="input-field flex-1 resize-none"
+                          rows={2}
+                          placeholder={item.reply_message ? 'Send another reply...' : 'Write a reply to this customer...'}
+                          value={replyDrafts[item.id] ?? ''}
+                          onChange={(e) =>
+                            setReplyDrafts((current) => ({ ...current, [item.id]: e.target.value }))
+                          }
+                        />
+                        <button
+                          onClick={() => handleReply(item)}
+                          disabled={replyingId === item.id}
+                          className="btn-primary flex items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-bold disabled:opacity-60"
+                        >
+                          {replyingId === item.id ? (
+                            <Loader2 size={15} className="animate-spin" />
+                          ) : (
+                            <MessageSquare size={15} />
+                          )}
+                          {item.reply_message ? 'Send again' : 'Send reply'}
+                        </button>
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -592,9 +707,24 @@ function StatCard({ icon: Icon, label, value }) {
   )
 }
 
-function StatusPill({ children }) {
+const STATUS_STYLES = {
+  new: 'bg-[#F0FAF8] text-[#0F766E]',
+  read: 'bg-blue-50 text-blue-600',
+  replied: 'bg-emerald-50 text-emerald-600',
+  closed: 'bg-[#F3F4F6] text-[#6B7280]',
+  active: 'bg-emerald-50 text-emerald-600',
+  draft: 'bg-[#F3F4F6] text-[#6B7280]',
+  pending: 'bg-amber-50 text-amber-600',
+  sold: 'bg-rose-50 text-rose-600',
+  rented: 'bg-blue-50 text-blue-600',
+  approved: 'bg-emerald-50 text-emerald-600',
+  rejected: 'bg-rose-50 text-rose-600',
+}
+
+function StatusPill({ status, children }) {
+  const style = STATUS_STYLES[status] || 'bg-[#F0FAF8] text-[#0F766E]'
   return (
-    <span className="rounded-full bg-[#F0FAF8] px-3 py-1 text-xs font-bold text-[#0F766E]">
+    <span className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${style}`}>
       {children}
     </span>
   )
@@ -613,11 +743,16 @@ function EmptyState({ title, description }) {
 }
 
 function Toast({ text, onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 4000)
+    return () => clearTimeout(timer)
+  }, [text, onClose])
+
   return (
-    <div className="fixed bottom-6 right-6 z-50 rounded-2xl bg-[#134E4A] px-5 py-4 text-sm font-bold text-white shadow-xl">
+    <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-[#134E4A] px-5 py-4 text-sm font-bold text-white shadow-xl">
       {text}
-      <button onClick={onClose} className="ml-4 text-white/70 hover:text-white">
-        x
+      <button onClick={onClose} className="text-white/70 hover:text-white" aria-label="Dismiss">
+        <X size={14} />
       </button>
     </div>
   )

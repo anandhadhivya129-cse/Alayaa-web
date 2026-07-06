@@ -29,7 +29,6 @@ function normalizeProfile(row, brokerApproval = null) {
     brokerApproval,
   }
 }
-
 function formatIndianPrice(value) {
   const num = Number(value || 0)
   if (num >= 10000000) return `₹${(num / 10000000).toFixed(2)} Cr`
@@ -38,10 +37,9 @@ function formatIndianPrice(value) {
   if (num === 0)       return 'On request'
   return `₹${num.toLocaleString('en-IN')}`
 }
-
 function normalizeProperty(row) {
   if (!row) return null
-
+  
   return {
     id: row.id,
     broker_id: row.broker_id || null,
@@ -50,8 +48,8 @@ function normalizeProperty(row) {
     city: row.city || '',
     locality: row.locality || '',
     location: row.location || '',
-    price: formatIndianPrice(row.price_value),
-    priceValue: Number(row.price_value || 0) / 100000, // raw rupees -> lakhs, matching mock data's scale
+    price: row.price || 'On request',
+    priceValue: Number(row.price_value || 0) / 100000, // convert raw rupees to lakhs, matching mock data's scale
     bhk: Number(row.bhk || row.bedrooms || 0),
     bedrooms: Number(row.bedrooms || 0),
     bathrooms: Number(row.bathrooms || 0),
@@ -73,6 +71,7 @@ function normalizeProperty(row) {
   }
 }
 
+
 function normalizeFavourite(row, property = null) {
   return {
     id: row.id,
@@ -91,6 +90,8 @@ function normalizeEnquiry(row, property = null, broker = null) {
     broker_id: row.broker_id,
     message: row.message || '',
     status: row.status || 'new',
+    reply_message: row.reply_message || '',
+    replied_at: row.replied_at || null,
     created_at: row.created_at || null,
     property,
     broker,
@@ -110,8 +111,9 @@ async function getCurrentAuthUser() {
   return data.user || null
 }
 
+
 async function fetchBrokerApproval(brokerId) {
-  return { status: 'approved' }
+  return { status: 'approved' }  
 }
 
 async function ensureProfileForAuthUser(authUser) {
@@ -127,6 +129,7 @@ async function ensureProfileForAuthUser(authUser) {
     return data
   }
 
+  
   if (authUser.email) {
     const { data: byEmail, error: emailError } = await supabase
       .from('profiles')
@@ -171,9 +174,9 @@ async function ensureProfileForAuthUser(authUser) {
   return inserted
 }
 
-async function attachProperties(rows) {
+async function attachProperties(rows, normalizer = normalizeFavourite) {
   const propertyIds = [...new Set(rows.map((row) => row.property_id).filter(Boolean))]
-  if (!propertyIds.length) return rows
+  if (!propertyIds.length) return rows.map((row) => normalizer(row, null))
 
   const { data: properties, error } = await supabase
     .from('properties')
@@ -183,7 +186,7 @@ async function attachProperties(rows) {
   if (error) throw error
 
   const propertyMap = new Map((properties || []).map((property) => [property.id, normalizeProperty(property)]))
-  return rows.map((row) => normalizeFavourite(row, propertyMap.get(row.property_id) || null))
+  return rows.map((row) => normalizer(row, propertyMap.get(row.property_id) || null))
 }
 
 async function attachProfiles(rows, profileKey) {
@@ -208,6 +211,7 @@ function authRedirectPath(nextPath) {
 
 export async function login({ email, password, role }) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+
 
   if (error) throw error
 
@@ -270,6 +274,9 @@ export async function register(payload) {
       },
     },
   })
+
+  console.log('SIGNUP RESULT DATA:', data)
+  console.log('SIGNUP RESULT ERROR:', error)
 
   if (error) throw error
 
@@ -358,8 +365,12 @@ export async function uploadProfilePicture(file, userId) {
   const filePath = `${userId}/${crypto.randomUUID()}.${extension}`
 
   const { error } = await supabase.storage
-    .from(PROPERTY_BUCKET)
-    .upload(filePath, file, { upsert: true, cacheControl: '3600', contentType: file.type })
+  .from(PROPERTY_BUCKET)
+  .upload(filePath, file, { upsert: true, cacheControl: '3600', contentType: file.type })
+
+console.log('UPLOAD ERROR DETAIL:', error, 'BUCKET:', PROPERTY_BUCKET, 'PATH:', filePath, 'FILE TYPE:', file.type)
+
+if (error) throw error
 
   if (error) throw error
 
@@ -385,7 +396,6 @@ export async function uploadPropertyImages(files, brokerId) {
 
   return uploads
 }
-
 export async function fetchProperties(filters = {}) {
   const options = typeof filters === 'string' ? { query: filters } : filters
 
@@ -401,7 +411,7 @@ export async function fetchProperties(filters = {}) {
   } = options
 
   let request = supabase
-    .from('properties')
+    .from('properties') // <-- your actual table name
     .select('*')
     .order('id', { ascending: false })
 
@@ -410,8 +420,8 @@ export async function fetchProperties(filters = {}) {
   }
 
   if (city) {
-    request = request.ilike('city', city)
-  }
+  request = request.ilike('city', city)
+}
 
   if (propertyType) {
     request = request.eq('property_type', propertyType)
@@ -462,34 +472,23 @@ export async function fetchPropertyById(id) {
   return normalizeProperty(data)
 }
 
+// AFTER
 export async function fetchBrokerProperties(brokerId) {
   const { data, error } = await supabase
     .from('properties')
     .select('*')
-    .eq('broker_id', brokerId)
+    .eq('broker_id', brokerId)   // ✅ directly filter
     .order('id', { ascending: false })
 
   if (error) throw error
   return (data || []).map(normalizeProperty)
 }
 
-/**
- * IMPORTANT: The "price" field on the broker form is entered in LAKHS
- * (e.g. broker types 96 to mean ₹96 Lakh). We convert it to actual
- * rupees here before saving, since price_value in the DB must always
- * be stored in plain rupees for formatIndianPrice() to work correctly.
- */
-function priceInputToRupees(price) {
-  const lakhs = Number(price || 0)
-  return Math.round(lakhs * 100000)
-}
-
 export async function createProperty(payload) {
   const { data: authUser, error: authErr } = await supabase.auth.getUser()
-  if (authErr) throw authErr
-
+  console.log('AUTH USER:', authUser, 'AUTH ERROR:', authErr)
   const { data: sessionData } = await supabase.auth.getSession()
-
+  console.log('SESSION:', sessionData)
   const brokerId = payload.broker_id || authUser.user?.id
   if (!brokerId) throw new Error('A logged in broker is required.')
 
@@ -497,7 +496,7 @@ export async function createProperty(payload) {
     broker_id: brokerId,
     title: payload.title,
     description: payload.description,
-    price_value: priceInputToRupees(payload.price),
+   price_value: Number(payload.price || 0),  
     location: payload.location,
     city: payload.city,
     bedrooms: Number(payload.bedrooms || 0),
@@ -518,11 +517,12 @@ export async function createProperty(payload) {
   return normalizeProperty(data)
 }
 
+// AFTER
 export async function updateProperty(id, payload) {
   const row = {
     title: payload.title,
     description: payload.description,
-    price_value: priceInputToRupees(payload.price),
+    price_value: Number(payload.price || 0),  
     location: payload.location,
     city: payload.city,
     locality: payload.locality || '',
@@ -534,6 +534,7 @@ export async function updateProperty(id, payload) {
     images: asArray(payload.images),
     updated_at: new Date().toISOString(),
   }
+  
 
   const { data, error } = await supabase
     .from('properties')
@@ -602,7 +603,7 @@ export async function fetchCustomerEnquiries(customerId) {
 
   if (error) throw error
   const rows = data || []
-  return attachProperties(rows)
+  return attachProperties(rows, normalizeEnquiry)
 }
 
 export async function fetchBrokerEnquiries(brokerId) {
@@ -614,7 +615,8 @@ export async function fetchBrokerEnquiries(brokerId) {
 
   if (error) throw error
   const rows = data || []
-  return attachProperties(rows)
+  const withProperties = await attachProperties(rows, normalizeEnquiry)
+  return attachProfiles(withProperties, 'customer_id')
 }
 
 export async function createEnquiry(payload) {
@@ -644,6 +646,35 @@ export async function createEnquiry(payload) {
     })
   } catch (sendError) {
     console.error('Enquiry notification failed', sendError)
+  }
+
+  return normalizeEnquiry(data)
+}
+
+export async function replyToEnquiry(enquiryId, replyMessage, context = {}) {
+  const { data, error } = await supabase
+    .from('enquiries')
+    .update({
+      reply_message: replyMessage,
+      status: 'replied',
+      replied_at: new Date().toISOString(),
+    })
+    .eq('id', enquiryId)
+    .select('*')
+    .single()
+
+  if (error) throw error
+
+  try {
+    await sendEmailEvent('enquiry_reply', {
+      to: context.customer_email || '',
+      customerName: context.customer_name || '',
+      brokerName: context.broker_name || '',
+      propertyTitle: context.property_title || '',
+      replyMessage,
+    })
+  } catch (sendError) {
+    console.error('Enquiry reply notification failed', sendError)
   }
 
   return normalizeEnquiry(data)
@@ -681,6 +712,24 @@ export async function fetchAdminStats() {
     usersCount: profiles.count || 0,
     enquiriesCount: enquiries.count || 0,
     brokerRequestsCount: approvals.count || 0,
+  }
+}
+
+export async function fetchAdminActivitySeries() {
+  const [properties, profiles, enquiries] = await Promise.all([
+    supabase.from('properties').select('created_at'),
+    supabase.from('profiles').select('created_at'),
+    supabase.from('enquiries').select('created_at'),
+  ])
+
+  if (properties.error) throw properties.error
+  if (profiles.error) throw profiles.error
+  if (enquiries.error) throw enquiries.error
+
+  return {
+    properties: (properties.data || []).map((row) => row.created_at).filter(Boolean),
+    users: (profiles.data || []).map((row) => row.created_at).filter(Boolean),
+    enquiries: (enquiries.data || []).map((row) => row.created_at).filter(Boolean),
   }
 }
 

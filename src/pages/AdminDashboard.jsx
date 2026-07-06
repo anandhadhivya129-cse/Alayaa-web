@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   BarChart3,
   Building2,
-  CheckCircle2,
   Clock3,
   LayoutDashboard,
   ListChecks,
@@ -16,12 +15,17 @@ import {
   Users,
   Loader2,
   Trash2,
+  Menu,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import ProfileEditor from '../components/ProfileEditor.jsx';
+import ActivityChart from '../components/ActivityChart.jsx';
+import { buildActivitySeries, ACTIVITY_PERIODS } from '../utils/timeSeries.js';
 import {
   approveBroker,
   deleteProperty,
+  fetchAdminActivitySeries,
   fetchAdminStats,
   fetchAdminUsers,
   fetchPendingBrokers,
@@ -35,17 +39,13 @@ function formatPrice(value) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(value || 0));
 }
 
-const analytics = [
-  { label: 'Total Properties', value: '10,840', change: '+18%', icon: Building2 },
-  { label: 'Pending Approval', value: '128', change: '-9%', icon: Clock3 },
-  { label: 'Active Listings', value: '8,926', change: '+22%', icon: CheckCircle2 },
-  { label: 'User Analytics', value: '42.7K', change: '+18%', icon: BarChart3 },
-];
+const PERIOD_LABELS = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState('overview');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ propertiesCount: 0, usersCount: 0, enquiriesCount: 0, brokerRequestsCount: 0 });
   const [pendingBrokers, setPendingBrokers] = useState([]);
@@ -54,6 +54,13 @@ export default function AdminDashboard() {
   const [query, setQuery] = useState('');
   const [toast, setToast] = useState('');
   const [saving, setSaving] = useState(false);
+  const [activityRaw, setActivityRaw] = useState({ users: [], properties: [], enquiries: [] });
+  const [chartPeriod, setChartPeriod] = useState('daily');
+
+  const chartData = useMemo(
+    () => buildActivitySeries(activityRaw, chartPeriod),
+    [activityRaw, chartPeriod]
+  );
 
   const filteredProperties = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -72,17 +79,19 @@ export default function AdminDashboard() {
     const load = async () => {
       setLoading(true);
       try {
-        const [statsData, pendingData, usersData, propertiesData] = await Promise.all([
+        const [statsData, pendingData, usersData, propertiesData, activityData] = await Promise.all([
           fetchAdminStats(),
           fetchPendingBrokers(),
           fetchAdminUsers(),
           fetchProperties({ status: '' }),
+          fetchAdminActivitySeries(),
         ]);
         if (!active) return;
         setStats(statsData);
         setPendingBrokers(pendingData);
         setUsers(usersData);
         setProperties(propertiesData);
+        setActivityRaw(activityData);
       } catch (error) {
         if (active) setToast(error.message);
       } finally {
@@ -102,16 +111,18 @@ export default function AdminDashboard() {
   };
 
   const refresh = async () => {
-    const [statsData, pendingData, usersData, propertiesData] = await Promise.all([
+    const [statsData, pendingData, usersData, propertiesData, activityData] = await Promise.all([
       fetchAdminStats(),
       fetchPendingBrokers(),
       fetchAdminUsers(),
       fetchProperties({ status: '' }),
+      fetchAdminActivitySeries(),
     ]);
     setStats(statsData);
     setPendingBrokers(pendingData);
     setUsers(usersData);
     setProperties(propertiesData);
+    setActivityRaw(activityData);
   };
 
   const handleApprove = async (brokerId) => {
@@ -182,30 +193,80 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#FAF9F6]">
-      <aside className="fixed left-0 top-0 hidden h-full w-64 border-r border-[#E5E7EB] bg-white p-5 lg:flex lg:flex-col">
-        <Link to="/" className="mb-10 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F766E] font-extrabold text-white">A</div>
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B7280]">Admin</div>
-            <div className="text-xl font-extrabold text-[#134E4A]">ALAYAA</div>
-          </div>
+      {/* Mobile top bar with hamburger toggle (hidden on lg and up) */}
+      <div className="sticky top-0 z-40 flex items-center justify-between border-b border-[#E5E7EB] bg-white px-4 py-3 lg:hidden">
+        <Link to="/" className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0F766E] font-extrabold text-white">A</div>
+          <span className="text-lg font-extrabold text-[#134E4A]">ALAYAA</span>
         </Link>
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#E5E7EB] text-[#1F2937]"
+          aria-label="Open menu"
+        >
+          <Menu size={20} />
+        </button>
+      </div>
+
+      {/* Backdrop shown only when mobile drawer is open */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`fixed left-0 top-0 z-50 flex h-full w-64 -translate-x-full flex-col border-r border-[#E5E7EB] bg-white p-5 transition-transform duration-200 lg:translate-x-0 lg:flex ${
+          sidebarOpen ? 'translate-x-0' : ''
+        }`}
+      >
+        <div className="mb-10 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F766E] font-extrabold text-white">A</div>
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B7280]">Admin</div>
+              <div className="text-xl font-extrabold text-[#134E4A]">ALAYAA</div>
+            </div>
+          </Link>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-[#6B7280] hover:bg-[#F8F8F7] lg:hidden"
+            aria-label="Close menu"
+          >
+            <X size={18} />
+          </button>
+        </div>
         <nav className="flex-1 space-y-2">
           {[
-            ['overview', 'Overview', LayoutDashboard],
-            ['brokers', 'Brokers', ShieldCheck],
-            ['properties', 'Properties', Building2],
-            ['users', 'Users', Users],
-            ['profile', 'Profile', Settings],
-          ].map(([id, label, Icon]) => (
+            ['overview', 'Overview', LayoutDashboard, 0],
+            ['brokers', 'Brokers', ShieldCheck, pendingBrokers.length],
+            ['properties', 'Properties', Building2, 0],
+            ['users', 'Users', Users, 0],
+            ['profile', 'Profile', Settings, 0],
+          ].map(([id, label, Icon, badgeCount]) => (
             <button
               key={id}
-              onClick={() => setTab(id)}
-              className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold transition ${
+              onClick={() => {
+                setTab(id);
+                setSidebarOpen(false);
+              }}
+              className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-sm font-bold transition ${
                 tab === id ? 'bg-[#0F766E] text-white' : 'text-[#6B7280] hover:bg-[#F0FAF8] hover:text-[#0F766E]'
               }`}
             >
-              <Icon size={17} /> {label}
+              <span className="flex items-center gap-3">
+                <Icon size={17} /> {label}
+              </span>
+              {badgeCount > 0 ? (
+                <span
+                  className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold ${
+                    tab === id ? 'bg-white text-[#0F766E]' : 'bg-rose-500 text-white'
+                  }`}
+                >
+                  {badgeCount > 99 ? '99+' : badgeCount}
+                </span>
+              ) : null}
             </button>
           ))}
         </nav>
@@ -243,6 +304,40 @@ export default function AdminDashboard() {
                 <Metric icon={MessageSquare} label="Enquiries" value={stats.enquiriesCount} />
                 <Metric icon={Clock3} label="Pending brokers" value={stats.brokerRequestsCount} />
               </div>
+
+              <section className="surface rounded-[28px] p-6 sm:p-8">
+                <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 size={20} className="text-[#0F766E]" />
+                    <div>
+                      <h2 className="text-xl font-extrabold text-[#1F2937]">Platform activity</h2>
+                      <p className="text-sm text-[#6B7280]">New users, properties, and enquiries over time.</p>
+                    </div>
+                  </div>
+                  <div className="flex w-fit gap-1 rounded-2xl bg-[#F8F8F7] p-1">
+                    {ACTIVITY_PERIODS.map((period) => (
+                      <button
+                        key={period}
+                        onClick={() => setChartPeriod(period)}
+                        className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+                          chartPeriod === period
+                            ? 'bg-white text-[#0F766E] shadow-sm'
+                            : 'text-[#6B7280] hover:text-[#0F766E]'
+                        }`}
+                      >
+                        {PERIOD_LABELS[period]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {loading ? (
+                  <div className="flex items-center justify-center py-14 text-[#6B7280]">
+                    <Loader2 className="mr-2 animate-spin" size={18} /> Loading activity...
+                  </div>
+                ) : (
+                  <ActivityChart labels={chartData.labels} series={chartData.series} />
+                )}
+              </section>
             </div>
           ) : null}
 
@@ -463,10 +558,17 @@ function EmptyState({ title, description }) {
 }
 
 function Toast({ text, onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 4000);
+    return () => clearTimeout(timer);
+  }, [text, onClose]);
+
   return (
-    <div className="fixed bottom-6 right-6 z-50 rounded-2xl bg-[#134E4A] px-5 py-4 text-sm font-bold text-white shadow-xl">
+    <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-[#134E4A] px-5 py-4 text-sm font-bold text-white shadow-xl">
       {text}
-      <button onClick={onClose} className="ml-4 text-white/70 hover:text-white">x</button>
+      <button onClick={onClose} className="text-white/70 hover:text-white" aria-label="Dismiss">
+        <X size={14} />
+      </button>
     </div>
   );
 }
