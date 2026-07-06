@@ -25,6 +25,7 @@ import {
   Shield,
   Download,
   X,
+  Menu,
 } from 'lucide-react';
 
 import { useAuth } from '../contexts/AuthContext.jsx';
@@ -58,6 +59,18 @@ function Toast({ message, type, onClose }) {
 // ─── Shared bits ─────────────────────────────────────────────────────────────
 function Badge({ children }) {
   return <span className="rounded-full bg-[#F8F8F7] px-3 py-1 text-xs font-bold text-[#6B7280]">{children}</span>;
+}
+
+const STATUS_STYLES = {
+  new: 'bg-[#F0FAF8] text-[#0F766E]',
+  read: 'bg-blue-50 text-blue-600',
+  replied: 'bg-emerald-50 text-emerald-600',
+  closed: 'bg-[#F3F4F6] text-[#6B7280]',
+};
+
+function StatusBadge({ status, children }) {
+  const style = STATUS_STYLES[status] || 'bg-[#F8F8F7] text-[#6B7280]';
+  return <span className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${style}`}>{children}</span>;
 }
 
 function EmptyState({ icon: Icon = Home, title, description }) {
@@ -518,6 +531,7 @@ export default function CustomerDashboard() {
   const navigate = useNavigate();
 
   const [tab, setTab] = useState('properties');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const [loading, setLoading] = useState(true);
   const [properties, setProperties] = useState([]);
@@ -559,6 +573,10 @@ export default function CustomerDashboard() {
   }, [user?.id]);
 
   const favoriteIds = useMemo(() => new Set(favorites.map((item) => item.property_id)), [favorites]);
+  const repliedEnquiryCount = useMemo(
+    () => enquiries.filter((item) => item.status === 'replied').length,
+    [enquiries]
+  );
   const cities = useMemo(() => [...new Set(properties.map((p) => p.city).filter(Boolean))], [properties]);
   const types = useMemo(() => [...new Set(properties.map((p) => p.property_type).filter(Boolean))], [properties]);
 
@@ -618,29 +636,79 @@ export default function CustomerDashboard() {
 
   return (
     <div className="min-h-screen bg-[#FAF9F6]">
-      <aside className="fixed left-0 top-0 hidden h-full w-64 border-r border-[#E5E7EB] bg-white p-5 lg:flex lg:flex-col">
-        <Link to="/" className="mb-10 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F766E] font-extrabold text-white">A</div>
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B7280]">Customer</div>
-            <div className="text-xl font-extrabold text-[#134E4A]">ALAYAA</div>
-          </div>
+      {/* Mobile top bar with hamburger toggle (hidden on lg and up) */}
+      <div className="sticky top-0 z-40 flex items-center justify-between border-b border-[#E5E7EB] bg-white px-4 py-3 lg:hidden">
+        <Link to="/" className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0F766E] font-extrabold text-white">A</div>
+          <span className="text-lg font-extrabold text-[#134E4A]">ALAYAA</span>
         </Link>
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#E5E7EB] text-[#1F2937]"
+          aria-label="Open menu"
+        >
+          <Menu size={20} />
+        </button>
+      </div>
+
+      {/* Backdrop shown only when mobile drawer is open */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`fixed left-0 top-0 z-50 flex h-full w-64 -translate-x-full flex-col border-r border-[#E5E7EB] bg-white p-5 transition-transform duration-200 lg:translate-x-0 lg:flex ${
+          sidebarOpen ? 'translate-x-0' : ''
+        }`}
+      >
+        <div className="mb-10 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F766E] font-extrabold text-white">A</div>
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B7280]">Customer</div>
+              <div className="text-xl font-extrabold text-[#134E4A]">ALAYAA</div>
+            </div>
+          </Link>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-[#6B7280] hover:bg-[#F8F8F7] lg:hidden"
+            aria-label="Close menu"
+          >
+            <X size={18} />
+          </button>
+        </div>
         <nav className="flex-1 space-y-2">
           {[
-            ['properties', 'Browse Properties', Search],
-            ['favorites', 'Favorites', Heart],
-            ['enquiries', 'My Enquiries', MessageSquare],
-            ['profile', 'Profile', User],
-          ].map(([id, label, Icon]) => (
+            ['properties', 'Browse Properties', Search, 0],
+            ['favorites', 'Favorites', Heart, favorites.length],
+            ['enquiries', 'My Enquiries', MessageSquare, repliedEnquiryCount],
+            ['profile', 'Profile', User, 0],
+          ].map(([id, label, Icon, badgeCount]) => (
             <button
               key={id}
-              onClick={() => setTab(id)}
-              className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold transition ${
+              onClick={() => {
+                setTab(id);
+                setSidebarOpen(false);
+              }}
+              className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-sm font-bold transition ${
                 tab === id ? 'bg-[#0F766E] text-white' : 'text-[#6B7280] hover:bg-[#F0FAF8] hover:text-[#0F766E]'
               }`}
             >
-              <Icon size={17} /> {label}
+              <span className="flex items-center gap-3">
+                <Icon size={17} /> {label}
+              </span>
+              {badgeCount > 0 ? (
+                <span
+                  className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold ${
+                    tab === id ? 'bg-white text-[#0F766E]' : 'bg-rose-500 text-white'
+                  }`}
+                >
+                  {badgeCount > 99 ? '99+' : badgeCount}
+                </span>
+              ) : null}
             </button>
           ))}
         </nav>
@@ -785,15 +853,30 @@ export default function CustomerDashboard() {
                   {enquiries.map((enquiry) => (
                     <div
                       key={enquiry.id}
-                      className="flex flex-col gap-2 rounded-[24px] border border-[#E5E7EB] bg-white p-5 sm:flex-row sm:items-center sm:justify-between"
+                      className="flex flex-col gap-3 rounded-[24px] border border-[#E5E7EB] bg-white p-5"
                     >
-                      <div>
-                        <div className="font-extrabold text-[#1F2937]">
-                          {enquiry.property?.title || 'Property enquiry'}
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="font-extrabold text-[#1F2937]">
+                            {enquiry.property?.title || 'Property enquiry'}
+                          </div>
+                          <div className="mt-1 text-sm text-[#6B7280]">{enquiry.message}</div>
                         </div>
-                        <div className="mt-1 text-sm text-[#6B7280]">{enquiry.message}</div>
+                        <StatusBadge status={enquiry.status}>{enquiry.status || 'pending'}</StatusBadge>
                       </div>
-                      <Badge>{enquiry.status || 'pending'}</Badge>
+
+                      {enquiry.reply_message ? (
+                        <div className="rounded-2xl bg-[#F0FAF8] p-4">
+                          <div className="text-xs font-bold uppercase tracking-wide text-[#0F766E]">
+                            Broker reply
+                          </div>
+                          <p className="mt-1 text-sm leading-6 text-[#134E4A]">{enquiry.reply_message}</p>
+                        </div>
+                      ) : (
+                        <div className="text-xs font-semibold text-[#9CA3AF]">
+                          Waiting for the broker to respond.
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

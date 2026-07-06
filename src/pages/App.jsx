@@ -73,20 +73,6 @@ export default function App() {
           />
 
           <Route path="*" element={<Navigate to="/" replace />} />
-
-          <Route path="/login" element={<CustomerLogin />} />
-          <Route path="/register" element={<CustomerRegister />} />
-          <Route path="/broker/login" element={<BrokerLogin />} />
-          <Route path="/broker/register" element={<BrokerRegister />} />
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/broker/dashboard" element={<ProtectedRoute allowedRoles={['broker']}><BrokerDashboard /></ProtectedRoute>} />
-          <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['user']}><CustomerDashboard /></ProtectedRoute>} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/unauthorized" element={<Unauthorized />} />
-          <Route path="*" element={<Navigate to="/" />} />
-
         </Routes>
       </BrowserRouter>
     </AuthProvider>

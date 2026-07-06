@@ -35,8 +35,7 @@ const navigate = useNavigate()
             Discover verified homes, apartments, villas, plots, and commercial spaces across Tamil Nadu.
           </p>
 
-          // REPLACE WITH this
-<div className="mt-9">
+          <div className="mt-9">
   {/* Tab Toggle */}
   <div className="flex w-fit overflow-hidden rounded-t-2xl border border-b-0 border-[#E5E7EB] bg-white">
     {TABS.map((tab) => (
@@ -92,7 +91,7 @@ const navigate = useNavigate()
   </div>
 </div>
 
-          <div className="mt-8 grid max-w-xl grid-cols-3 gap-4">
+          <div className="mt-8 grid max-w-xl grid-cols-1 gap-4 sm:grid-cols-3">
             {[
               ['10', 'TN cities'],
               ['31K+', 'verified listings'],
@@ -110,7 +109,7 @@ const navigate = useNavigate()
           <img
             src="https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1200&auto=format&fit=crop"
             alt="Premium Tamil Nadu residence"
-            className="h-[520px] w-full rounded-[32px] object-cover shadow-2xl"
+            className="h-[260px] w-full rounded-[32px] object-cover shadow-2xl sm:h-[340px] lg:h-[520px]"
           />
           <div className="absolute bottom-5 left-5 right-5 rounded-3xl bg-white/88 p-5 shadow-xl backdrop-blur">
             <div className="flex items-start justify-between gap-4">

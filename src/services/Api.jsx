@@ -90,6 +90,8 @@ function normalizeEnquiry(row, property = null, broker = null) {
     broker_id: row.broker_id,
     message: row.message || '',
     status: row.status || 'new',
+    reply_message: row.reply_message || '',
+    replied_at: row.replied_at || null,
     created_at: row.created_at || null,
     property,
     broker,
@@ -172,9 +174,9 @@ async function ensureProfileForAuthUser(authUser) {
   return inserted
 }
 
-async function attachProperties(rows) {
+async function attachProperties(rows, normalizer = normalizeFavourite) {
   const propertyIds = [...new Set(rows.map((row) => row.property_id).filter(Boolean))]
-  if (!propertyIds.length) return rows
+  if (!propertyIds.length) return rows.map((row) => normalizer(row, null))
 
   const { data: properties, error } = await supabase
     .from('properties')
@@ -184,7 +186,7 @@ async function attachProperties(rows) {
   if (error) throw error
 
   const propertyMap = new Map((properties || []).map((property) => [property.id, normalizeProperty(property)]))
-  return rows.map((row) => normalizeFavourite(row, propertyMap.get(row.property_id) || null))
+  return rows.map((row) => normalizer(row, propertyMap.get(row.property_id) || null))
 }
 
 async function attachProfiles(rows, profileKey) {
@@ -601,7 +603,7 @@ export async function fetchCustomerEnquiries(customerId) {
 
   if (error) throw error
   const rows = data || []
-  return attachProperties(rows)
+  return attachProperties(rows, normalizeEnquiry)
 }
 
 export async function fetchBrokerEnquiries(brokerId) {
@@ -613,7 +615,8 @@ export async function fetchBrokerEnquiries(brokerId) {
 
   if (error) throw error
   const rows = data || []
-  return attachProperties(rows)
+  const withProperties = await attachProperties(rows, normalizeEnquiry)
+  return attachProfiles(withProperties, 'customer_id')
 }
 
 export async function createEnquiry(payload) {
@@ -643,6 +646,35 @@ export async function createEnquiry(payload) {
     })
   } catch (sendError) {
     console.error('Enquiry notification failed', sendError)
+  }
+
+  return normalizeEnquiry(data)
+}
+
+export async function replyToEnquiry(enquiryId, replyMessage, context = {}) {
+  const { data, error } = await supabase
+    .from('enquiries')
+    .update({
+      reply_message: replyMessage,
+      status: 'replied',
+      replied_at: new Date().toISOString(),
+    })
+    .eq('id', enquiryId)
+    .select('*')
+    .single()
+
+  if (error) throw error
+
+  try {
+    await sendEmailEvent('enquiry_reply', {
+      to: context.customer_email || '',
+      customerName: context.customer_name || '',
+      brokerName: context.broker_name || '',
+      propertyTitle: context.property_title || '',
+      replyMessage,
+    })
+  } catch (sendError) {
+    console.error('Enquiry reply notification failed', sendError)
   }
 
   return normalizeEnquiry(data)
@@ -680,6 +712,24 @@ export async function fetchAdminStats() {
     usersCount: profiles.count || 0,
     enquiriesCount: enquiries.count || 0,
     brokerRequestsCount: approvals.count || 0,
+  }
+}
+
+export async function fetchAdminActivitySeries() {
+  const [properties, profiles, enquiries] = await Promise.all([
+    supabase.from('properties').select('created_at'),
+    supabase.from('profiles').select('created_at'),
+    supabase.from('enquiries').select('created_at'),
+  ])
+
+  if (properties.error) throw properties.error
+  if (profiles.error) throw profiles.error
+  if (enquiries.error) throw enquiries.error
+
+  return {
+    properties: (properties.data || []).map((row) => row.created_at).filter(Boolean),
+    users: (profiles.data || []).map((row) => row.created_at).filter(Boolean),
+    enquiries: (enquiries.data || []).map((row) => row.created_at).filter(Boolean),
   }
 }
 
