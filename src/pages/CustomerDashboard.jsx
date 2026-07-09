@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import EnquiryChatThread from '../components/EnquiryChatThread.jsx';
+import ContactCard from '../components/ContactCard.jsx';
+import { fetchProfileById } from '../services/api.jsx';
 import {
   Heart,
   Home,
@@ -100,11 +103,17 @@ const inputClass =
 
 // ─── Property Card ────────────────────────────────────────────────────────────
 function PropertyCard({ property, isFavorite, onToggleFavorite, saving }) {
+  const coverImage =
+    (Array.isArray(property.images) && property.images.length > 0 && property.images[0]) ||
+    property.image_url ||
+    property.image ||
+    null;
+
   return (
     <div className="group overflow-hidden rounded-[24px] border border-[#E5E7EB] bg-white transition hover:shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
       <div className="relative h-44 w-full overflow-hidden bg-[#F0FAF8]">
-        {property.image_url ? (
-          <img src={property.image_url} alt={property.title} className="h-full w-full object-cover" />
+        {coverImage ? (
+          <img src={coverImage} alt={property.title} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-[#0F766E]">
             <Building2 size={36} />
@@ -541,36 +550,43 @@ export default function CustomerDashboard() {
   const [city, setCity] = useState('');
   const [propertyType, setPropertyType] = useState('');
   const [savingFavorite, setSavingFavorite] = useState('');
+const [brokerProfiles, setBrokerProfiles] = useState({});
 
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      if (!user?.id) return;
-      setLoading(true);
-      try {
-        const [allProperties, favs, userEnquiries] = await Promise.all([
-          fetchProperties({ status: '' }),
-          fetchFavorites(user.id),
-          fetchCustomerEnquiries(user.id),
-        ]);
+useEffect(() => {
+  let active = true;
+  const load = async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const [allProperties, favs, userEnquiries] = await Promise.all([
+        fetchProperties({ status: '' }),
+        fetchFavorites(user.id),
+        fetchCustomerEnquiries(user.id),
+      ]);
 
-        if (!active) return;
+      if (!active) return;
 
-        setProperties(allProperties);
-        setFavorites(favs);
-        setEnquiries(userEnquiries);
-      } catch (error) {
-        if (active) setToast({ message: error.message, type: 'error' });
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
+      setProperties(allProperties);
+      setFavorites(favs);
+      setEnquiries(userEnquiries);
+      console.log('sample enquiry object:', userEnquiries[0]);
+const uniqueBrokerIds = [...new Set(userEnquiries.map((e) => e.broker_id).filter(Boolean))];
+      const brokerEntries = await Promise.all(
+        uniqueBrokerIds.map(async (id) => [id, await fetchProfileById(id)])
+      );
+      if (active) setBrokerProfiles(Object.fromEntries(brokerEntries));
+    } catch (error) {
+      if (active) setToast({ message: error.message, type: 'error' });
+    } finally {
+      if (active) setLoading(false);
+    }
+  };
 
-    load();
-    return () => {
-      active = false;
-    };
-  }, [user?.id]);
+  load();
+  return () => {
+    active = false;
+  };
+}, [user?.id]);
 
   const favoriteIds = useMemo(() => new Set(favorites.map((item) => item.property_id)), [favorites]);
   const repliedEnquiryCount = useMemo(
@@ -856,27 +872,26 @@ export default function CustomerDashboard() {
                       className="flex flex-col gap-3 rounded-[24px] border border-[#E5E7EB] bg-white p-5"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <div className="font-extrabold text-[#1F2937]">
-                            {enquiry.property?.title || 'Property enquiry'}
-                          </div>
-                          <div className="mt-1 text-sm text-[#6B7280]">{enquiry.message}</div>
-                        </div>
-                        <StatusBadge status={enquiry.status}>{enquiry.status || 'pending'}</StatusBadge>
-                      </div>
+  <div>
+    <div className="font-extrabold text-[#1F2937]">
+      {enquiry.property?.title || 'Property enquiry'}
+    </div>
+    <div className="mt-1 text-sm text-[#6B7280]">{enquiry.message}</div>
+    {enquiry.broker?.full_name ? (
+  <div className="mt-1 text-xs font-semibold text-[#9CA3AF]">
+    Broker: {enquiry.broker.full_name}
+  </div>
+) : null}
+  </div>
+  <StatusBadge status={enquiry.status}>{enquiry.status || 'pending'}</StatusBadge>
+</div>
 
-                      {enquiry.reply_message ? (
-                        <div className="rounded-2xl bg-[#F0FAF8] p-4">
-                          <div className="text-xs font-bold uppercase tracking-wide text-[#0F766E]">
-                            Broker reply
-                          </div>
-                          <p className="mt-1 text-sm leading-6 text-[#134E4A]">{enquiry.reply_message}</p>
-                        </div>
-                      ) : (
-                        <div className="text-xs font-semibold text-[#9CA3AF]">
-                          Waiting for the broker to respond.
-                        </div>
-                      )}
+               <ContactCard profile={brokerProfiles[enquiry.broker_id]} roleLabel="Broker" />
+<EnquiryChatThread
+  enquiryId={enquiry.id}
+  currentUserId={user.id}
+  currentUserRole="customer"
+/>
                     </div>
                   ))}
                 </div>

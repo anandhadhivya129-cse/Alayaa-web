@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import EnquiryChatThread from '../components/EnquiryChatThread.jsx'
 import {
   Building2,
   LogOut,
@@ -155,7 +156,7 @@ export default function BrokerDashboard() {
       }
       const payload = {
         ...form,
-        price: Number(form.price) * 10000000,
+        price: Number(form.price),
         images: imageUrls,
         broker_id: user.id,
       }
@@ -582,7 +583,7 @@ export default function BrokerDashboard() {
                         <div className="mt-3 text-sm leading-6 text-[#6B7280]">{property.description}</div>
                         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                           <div className="text-xl font-extrabold text-[#134E4A]">
-                            {formatPrice(property.price)}
+                           {formatPrice(property.priceValue)}
                           </div>
                           <div className="flex gap-2">
                             <button
@@ -634,36 +635,13 @@ export default function BrokerDashboard() {
                       </div>
                       <p className="mt-4 text-sm leading-6 text-[#6B7280]">{item.message}</p>
 
-                      {item.reply_message ? (
-                        <div className="mt-4 rounded-2xl bg-[#F0FAF8] p-4">
-                          <div className="text-xs font-bold uppercase tracking-wide text-[#0F766E]">Your reply</div>
-                          <p className="mt-1 text-sm leading-6 text-[#134E4A]">{item.reply_message}</p>
-                        </div>
-                      ) : null}
-
-                      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                        <textarea
-                          className="input-field flex-1 resize-none"
-                          rows={2}
-                          placeholder={item.reply_message ? 'Send another reply...' : 'Write a reply to this customer...'}
-                          value={replyDrafts[item.id] ?? ''}
-                          onChange={(e) =>
-                            setReplyDrafts((current) => ({ ...current, [item.id]: e.target.value }))
-                          }
-                        />
-                        <button
-                          onClick={() => handleReply(item)}
-                          disabled={replyingId === item.id}
-                          className="btn-primary flex items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-bold disabled:opacity-60"
-                        >
-                          {replyingId === item.id ? (
-                            <Loader2 size={15} className="animate-spin" />
-                          ) : (
-                            <MessageSquare size={15} />
-                          )}
-                          {item.reply_message ? 'Send again' : 'Send reply'}
-                        </button>
-                      </div>
+                     <div className="mt-4">
+  <EnquiryChatThread
+    enquiryId={item.id}
+    currentUserId={user.id}
+    currentUserRole="broker"
+  />
+</div>
                     </div>
                   ))
                 ) : (
