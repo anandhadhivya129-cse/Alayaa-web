@@ -48,8 +48,8 @@ function normalizeProperty(row) {
     city: row.city || '',
     locality: row.locality || '',
     location: row.location || '',
-    price: row.price || 'On request',
-    priceValue: Number(row.price_value || 0) / 100000, // convert raw rupees to lakhs, matching mock data's scale
+    price: Number(row.price_value || 0),
+    priceValue: Number(row.price_value || 0), // convert raw rupees to lakhs, matching mock data's scale
     bhk: Number(row.bhk || row.bedrooms || 0),
     bedrooms: Number(row.bedrooms || 0),
     bathrooms: Number(row.bathrooms || 0),
@@ -329,10 +329,6 @@ export async function fetchProfile(userId) {
   return normalizeProfile(data, approval)
 }
 
-export async function fetchProfileById(userId) {
-  return fetchProfile(userId)
-}
-
 export async function updateProfile(userId, updates) {
   const payload = {
     full_name: updates.full_name ?? updates.fullName ?? undefined,
@@ -597,7 +593,7 @@ export async function toggleFavorite(customerId, propertyId) {
 export async function fetchCustomerEnquiries(customerId) {
   const { data, error } = await supabase
     .from('enquiries')
-    .select('*')
+    .select('*, property:properties(title, location, city, broker_id)')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
 
@@ -865,3 +861,46 @@ export async function refreshSessionProfile() {
 }
 
 export { normalizeProfile, normalizeProperty, normalizeEnquiry, normalizeFavourite }
+
+export async function fetchEnquiryMessages(enquiryId) {
+  const { data, error } = await supabase
+    .from('enquiry_messages')
+    .select('*')
+    .eq('enquiry_id', enquiryId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+export async function sendEnquiryMessage(enquiryId, senderId, senderRole, message) {
+  const { data, error } = await supabase
+    .from('enquiry_messages')
+    .insert({ enquiry_id: enquiryId, sender_id: senderId, sender_role: senderRole, message })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export function subscribeToEnquiryMessages(enquiryId, onMessage) {
+  const channel = supabase
+    .channel(`enquiry-messages-${enquiryId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'enquiry_messages', filter: `enquiry_id=eq.${enquiryId}` },
+      (payload) => onMessage(payload.new)
+    )
+    .subscribe()
+  return () => supabase.removeChannel(channel)
+}
+
+export async function fetchProfileById(userId) {
+  if (!userId) return null
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, email, phone, rera_number, profile_picture')
+    .eq('id', userId)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
