@@ -26,7 +26,7 @@ import {
   replyToEnquiry,
   updateProperty,
   uploadPropertyImages,
-} from '../services/api.jsx'
+} from '../services/Api.jsx'
 
 const emptyForm = {
   title: '',

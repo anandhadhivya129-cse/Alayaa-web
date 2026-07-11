@@ -8,7 +8,7 @@ import {
   fetchFavorites,
   fetchPropertyById,
   toggleFavorite,
-} from '../services/api.jsx'
+} from '../services/Api.jsx'
 
 function formatPrice(value) {
   if (!Number.isFinite(value)) return 'On request'

@@ -19,7 +19,7 @@ const navLinks = [
 ]
 
 const navBtnClass =
-  'flex items-center gap-1 whitespace-nowrap rounded-full px-3.5 py-2 text-[15px] font-semibold text-[#1F2937] transition-colors duration-200 hover:bg-[#F0FAF8] hover:text-[#0F766E]'
+  'flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-2 text-[14px] font-semibold text-[#1F2937] transition-colors duration-200 hover:bg-[#F0FAF8] hover:text-[#0F766E]'
 
 const AlayaaLogo = () => (
   <div className="flex shrink-0 items-center gap-1.5">
@@ -107,7 +107,7 @@ export default function Navbar() {
   return (
     <>
       <nav className="sticky top-0 z-50 border-b border-[#E5E7EB] bg-white/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-20 max-w-7xl items-center px-3 py-3 sm:px-4 lg:px-6">
+        <div className="mx-auto flex h-20 max-w-7xl items-center gap-4 px-3 py-3 sm:px-4 lg:px-6">
 
           {/* LEFT: Logo */}
           <div className="flex shrink-0 items-center">
@@ -117,7 +117,9 @@ export default function Navbar() {
           </div>
 
           {/* CENTER: Nav links (always centered, never wraps) */}
-          <div className="hidden min-w-0 flex-1 items-center justify-center gap-x-0.5 overflow-visible lg:flex">
+          <div
+            className="hidden min-w-0 flex-1 items-center justify-center gap-x-0.5 overflow-visible xl:flex"
+          >
             {navLinks.map((item) => {
               const isMega = ['Buy', 'Rent', 'Commercial', 'New Projects', 'Plots'].includes(item.label)
               const alignRight = ['New Projects', 'Plots'].includes(item.label)
@@ -234,7 +236,7 @@ export default function Navbar() {
           </div>
 
           {/* RIGHT: Auth + Post Property */}
-          <div className="hidden shrink-0 items-center gap-3 md:flex">
+          <div className="hidden shrink-0 items-center gap-3 pl-2 md:flex">
             <div className="relative shrink-0">
               {user ? (
                 <>
@@ -323,7 +325,7 @@ export default function Navbar() {
 
           {/* Mobile menu toggle */}
           <button
-            className="ml-auto shrink-0 rounded-xl border border-[#E5E7EB] p-2 text-[#1F2937] md:hidden"
+            className="ml-auto shrink-0 rounded-xl border border-[#E5E7EB] p-2 text-[#1F2937] xl:hidden"
             onClick={() => setOpen((value) => !value)}
           >
             {open ? <X size={22} /> : <Menu size={22} />}
@@ -333,7 +335,7 @@ export default function Navbar() {
         {/* Mobile Menu */}
         <AnimatePresence>
           {open && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="border-t border-[#E5E7EB] bg-white px-4 py-4 md:hidden">
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="border-t border-[#E5E7EB] bg-white px-4 py-4 xl:hidden">
               <div className="mb-3 flex items-center gap-2 rounded-2xl bg-[#F8F8F7] px-3 py-2">
                 <Search size={16} className="text-[#0F766E]" />
                 <span className="text-sm text-[#6B7280]">Search Chennai, Coimbatore, Madurai...</span>
