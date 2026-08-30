@@ -20,12 +20,27 @@ export default function AuthCallback() {
           if (error) throw error
         }
 
+        let session = null
+        for (let attempt = 0; attempt < 20; attempt += 1) {
+          const { data } = await supabase.auth.getSession()
+          if (data?.session) {
+            session = data.session
+            break
+          }
+          await new Promise((resolve) => setTimeout(resolve, 150))
+        }
+
         if (!active) return
+
+        if (!session) {
+          throw new Error('We could not verify your sign-in link. Please request a new one.')
+        }
+
         setStatus('done')
         setMessage('Authentication completed successfully.')
         window.setTimeout(() => {
-          window.location.assign(nextPath)
-        }, 250)
+          window.location.replace(nextPath)
+        }, 100)
       } catch (error) {
         console.error(error)
         if (!active) return
@@ -58,4 +73,3 @@ export default function AuthCallback() {
     </div>
   )
 }
-

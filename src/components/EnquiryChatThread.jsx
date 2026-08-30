@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, Send } from 'lucide-react'
-import { fetchEnquiryMessages, sendEnquiryMessage, subscribeToEnquiryMessages } from '../services/api.jsx'
+import { fetchEnquiryMessages, sendEnquiryMessage, subscribeToEnquiryMessages } from '../services/Api.jsx'
 
 export default function EnquiryChatThread({ enquiryId, currentUserId, currentUserRole }) {
   const [messages, setMessages] = useState([])

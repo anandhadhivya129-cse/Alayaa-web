@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import EnquiryChatThread from '../components/EnquiryChatThread.jsx';
 import ContactCard from '../components/ContactCard.jsx';
-import { fetchProfileById } from '../services/api.jsx';
+import { fetchProfileById } from '../services/Api.jsx';
 import {
   Heart,
   Home,
@@ -177,6 +177,7 @@ function AvatarUpload({ initials, avatarUrl, onChange }) {
 
 // ─── Profile Tab ──────────────────────────────────────────────────────────────
 function ProfileTab({ showToast, user }) {
+  const { resetPassword, updateProfile } = useAuth();
   const [activeSection, setActiveSection] = useState('personal');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [saving, setSaving] = useState(false);
@@ -218,7 +219,6 @@ function ProfileTab({ showToast, user }) {
 
   const validatePasswords = () => {
     const errs = {};
-    if (!passwords.current) errs.current = 'Current password is required';
     if (passwords.next.length < 8) errs.next = 'Password must be at least 8 characters';
     if (passwords.next !== passwords.confirm) errs.confirm = 'Passwords do not match';
     return errs;
@@ -233,9 +233,19 @@ function ProfileTab({ showToast, user }) {
     }
     setPersonalErrors({});
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setSaving(false);
-    showToast('Profile updated successfully', 'success');
+    try {
+      await updateProfile({
+        fullName: personal.fullName,
+        phone: personal.phone,
+        city: personal.city,
+        bio: personal.bio,
+      });
+      showToast('Profile updated successfully', 'success');
+    } catch (err) {
+      showToast(err.message || 'Could not update profile', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handlePasswordChange = async (e) => {
@@ -247,10 +257,15 @@ function ProfileTab({ showToast, user }) {
     }
     setPwErrors({});
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setSaving(false);
-    setPasswords({ current: '', next: '', confirm: '' });
-    showToast('Password changed successfully', 'success');
+    try {
+      await resetPassword(passwords.next);
+      setPasswords({ current: '', next: '', confirm: '' });
+      showToast('Password changed successfully', 'success');
+    } catch (err) {
+      showToast(err.message || 'Could not update password', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleNotificationsSave = async () => {
@@ -412,14 +427,6 @@ function ProfileTab({ showToast, user }) {
             </div>
 
             <form onSubmit={handlePasswordChange} noValidate className="max-w-md space-y-5">
-              <Field label="Current password" error={pwErrors.current}>
-                <input
-                  type="password"
-                  className={inputClass}
-                  value={passwords.current}
-                  onChange={(e) => setPasswords({ ...passwords, current: e.target.value })}
-                />
-              </Field>
               <Field label="New password" error={pwErrors.next}>
                 <input
                   type="password"
