@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Mail } from 'lucide-react'
 import AuthShell from '../components/AuthShell.jsx'
-import { forgotPassword } from '../services/api.js'
+import { forgotPassword } from '../services/Api.jsx'
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('')

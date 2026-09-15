@@ -12,7 +12,13 @@ const markerIcon = new L.Icon({
 })
 
 export default function MapView({ properties }) {
-  const center = properties.length ? [properties[0].latitude, properties[0].longitude] : [11.1271, 78.6569]
+  const validProperties = (properties || []).filter(
+    (p) => typeof p.latitude === 'number' && typeof p.longitude === 'number'
+  )
+
+  const center = validProperties.length
+    ? [validProperties[0].latitude, validProperties[0].longitude]
+    : [11.1271, 78.6569]
 
   return (
     <div id="map" className="surface overflow-hidden rounded-3xl p-3">
@@ -21,7 +27,7 @@ export default function MapView({ properties }) {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {properties.map((property) => (
+        {validProperties.map((property) => (
           <Marker key={property.id} position={[property.latitude, property.longitude]} icon={markerIcon}>
             <Popup>
               <div className="min-w-[190px]">

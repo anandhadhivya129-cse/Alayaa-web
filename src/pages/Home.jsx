@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { fetchProperties } from '../services/Api.jsx'
 import PostPropertyModal from '../components/PostPropertyModal.jsx'
 import React from 'react'
 import { Award, Building2, CheckCircle2, FileText, Headphones, Home as HomeIcon, TrendingUp, Users } from 'lucide-react'
@@ -27,6 +28,13 @@ const advantages = [
 
 export default function Home() {
 const [showPostModal, setShowPostModal] = useState(false)
+const [homeProperties, setHomeProperties] = useState([])
+
+useEffect(() => {
+  fetchProperties({ status: 'active' })
+    .then(setHomeProperties)
+    .catch(() => setHomeProperties([]))
+}, [])
   return (
     <div className="app-shell">
       <Navbar />
@@ -63,7 +71,7 @@ const [showPostModal, setShowPostModal] = useState(false)
       </section>
 
       <div id="map">
-  <MapView properties={[]} />
+  <MapView properties={homeProperties} />
 </div>
 
 <div id="services">

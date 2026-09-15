@@ -36,4 +36,8 @@
     @apply text-xs font-bold uppercase tracking-[0.28em] text-[#0F766E];
   }
 }
-
+.leaflet-container {
+  height: 500px;
+  width: 100%;
+  z-index: 0;
+}

@@ -39,7 +39,7 @@ function formatIndianPrice(value) {
 }
 function normalizeProperty(row) {
   if (!row) return null
-  console.log('RAW ROW IMAGES:', row.images, 'TYPE:', typeof row.images, 'IS ARRAY:', Array.isArray(row.images), 'TITLE:', row.title)
+  
   return {
     id: row.id,
     broker_id: row.broker_id || null,
@@ -48,8 +48,8 @@ function normalizeProperty(row) {
     city: row.city || '',
     locality: row.locality || '',
     location: row.location || '',
-    price: row.price || 'On request',
-    priceValue: Number(row.price_value || 0) / 100000, // convert raw rupees to lakhs, matching mock data's scale
+    price: Number(row.price_value || 0),
+    priceValue: Number(row.price_value || 0), // convert raw rupees to lakhs, matching mock data's scale
     bhk: Number(row.bhk || row.bedrooms || 0),
     bedrooms: Number(row.bedrooms || 0),
     bathrooms: Number(row.bathrooms || 0),
@@ -90,6 +90,8 @@ function normalizeEnquiry(row, property = null, broker = null) {
     broker_id: row.broker_id,
     message: row.message || '',
     status: row.status || 'new',
+    reply_message: row.reply_message || '',
+    replied_at: row.replied_at || null,
     created_at: row.created_at || null,
     property,
     broker,
@@ -172,9 +174,9 @@ async function ensureProfileForAuthUser(authUser) {
   return inserted
 }
 
-async function attachProperties(rows) {
+async function attachProperties(rows, normalizer = normalizeFavourite) {
   const propertyIds = [...new Set(rows.map((row) => row.property_id).filter(Boolean))]
-  if (!propertyIds.length) return rows
+  if (!propertyIds.length) return rows.map((row) => normalizer(row, null))
 
   const { data: properties, error } = await supabase
     .from('properties')
@@ -184,7 +186,7 @@ async function attachProperties(rows) {
   if (error) throw error
 
   const propertyMap = new Map((properties || []).map((property) => [property.id, normalizeProperty(property)]))
-  return rows.map((row) => normalizeFavourite(row, propertyMap.get(row.property_id) || null))
+  return rows.map((row) => normalizer(row, propertyMap.get(row.property_id) || null))
 }
 
 async function attachProfiles(rows, profileKey) {
@@ -210,8 +212,6 @@ function authRedirectPath(nextPath) {
 export async function login({ email, password, role }) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
-  console.log("Login data:", data);
-console.log("Login error:", error);
 
   if (error) throw error
 
@@ -327,10 +327,6 @@ export async function fetchProfile(userId) {
 
   const approval = data.role === 'broker' ? await fetchBrokerApproval(userId) : null
   return normalizeProfile(data, approval)
-}
-
-export async function fetchProfileById(userId) {
-  return fetchProfile(userId)
 }
 
 export async function updateProfile(userId, updates) {
@@ -597,13 +593,13 @@ export async function toggleFavorite(customerId, propertyId) {
 export async function fetchCustomerEnquiries(customerId) {
   const { data, error } = await supabase
     .from('enquiries')
-    .select('*')
+    .select('*, property:properties(title, location, city, broker_id)')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
 
   if (error) throw error
   const rows = data || []
-  return attachProperties(rows)
+  return attachProperties(rows, normalizeEnquiry)
 }
 
 export async function fetchBrokerEnquiries(brokerId) {
@@ -615,7 +611,8 @@ export async function fetchBrokerEnquiries(brokerId) {
 
   if (error) throw error
   const rows = data || []
-  return attachProperties(rows)
+  const withProperties = await attachProperties(rows, normalizeEnquiry)
+  return attachProfiles(withProperties, 'customer_id')
 }
 
 export async function createEnquiry(payload) {
@@ -645,6 +642,35 @@ export async function createEnquiry(payload) {
     })
   } catch (sendError) {
     console.error('Enquiry notification failed', sendError)
+  }
+
+  return normalizeEnquiry(data)
+}
+
+export async function replyToEnquiry(enquiryId, replyMessage, context = {}) {
+  const { data, error } = await supabase
+    .from('enquiries')
+    .update({
+      reply_message: replyMessage,
+      status: 'replied',
+      replied_at: new Date().toISOString(),
+    })
+    .eq('id', enquiryId)
+    .select('*')
+    .single()
+
+  if (error) throw error
+
+  try {
+    await sendEmailEvent('enquiry_reply', {
+      to: context.customer_email || '',
+      customerName: context.customer_name || '',
+      brokerName: context.broker_name || '',
+      propertyTitle: context.property_title || '',
+      replyMessage,
+    })
+  } catch (sendError) {
+    console.error('Enquiry reply notification failed', sendError)
   }
 
   return normalizeEnquiry(data)
@@ -682,6 +708,24 @@ export async function fetchAdminStats() {
     usersCount: profiles.count || 0,
     enquiriesCount: enquiries.count || 0,
     brokerRequestsCount: approvals.count || 0,
+  }
+}
+
+export async function fetchAdminActivitySeries() {
+  const [properties, profiles, enquiries] = await Promise.all([
+    supabase.from('properties').select('created_at'),
+    supabase.from('profiles').select('created_at'),
+    supabase.from('enquiries').select('created_at'),
+  ])
+
+  if (properties.error) throw properties.error
+  if (profiles.error) throw profiles.error
+  if (enquiries.error) throw enquiries.error
+
+  return {
+    properties: (properties.data || []).map((row) => row.created_at).filter(Boolean),
+    users: (profiles.data || []).map((row) => row.created_at).filter(Boolean),
+    enquiries: (enquiries.data || []).map((row) => row.created_at).filter(Boolean),
   }
 }
 
@@ -817,3 +861,46 @@ export async function refreshSessionProfile() {
 }
 
 export { normalizeProfile, normalizeProperty, normalizeEnquiry, normalizeFavourite }
+
+export async function fetchEnquiryMessages(enquiryId) {
+  const { data, error } = await supabase
+    .from('enquiry_messages')
+    .select('*')
+    .eq('enquiry_id', enquiryId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+export async function sendEnquiryMessage(enquiryId, senderId, senderRole, message) {
+  const { data, error } = await supabase
+    .from('enquiry_messages')
+    .insert({ enquiry_id: enquiryId, sender_id: senderId, sender_role: senderRole, message })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export function subscribeToEnquiryMessages(enquiryId, onMessage) {
+  const channel = supabase
+    .channel(`enquiry-messages-${enquiryId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'enquiry_messages', filter: `enquiry_id=eq.${enquiryId}` },
+      (payload) => onMessage(payload.new)
+    )
+    .subscribe()
+  return () => supabase.removeChannel(channel)
+}
+
+export async function fetchProfileById(userId) {
+  if (!userId) return null
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, email, phone, rera_number, profile_picture')
+    .eq('id', userId)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}

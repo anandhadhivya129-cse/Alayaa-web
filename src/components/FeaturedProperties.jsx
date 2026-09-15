@@ -43,7 +43,7 @@ useEffect(() => {
     const bhkMatch = bhk === 'All' || String(property.bhk) === bhk
     const cityMatch = city === 'All' || property.city === city
     return budgetMatch && typeMatch && bhkMatch && cityMatch
-  }), [budget, type, bhk, city])
+  }), [properties, budget, type, bhk, city])
 
   const selectedProperties = properties.filter((property) => selected.includes(property.id))
 
