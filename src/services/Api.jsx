@@ -361,12 +361,8 @@ export async function uploadProfilePicture(file, userId) {
   const filePath = `${userId}/${crypto.randomUUID()}.${extension}`
 
   const { error } = await supabase.storage
-  .from(PROPERTY_BUCKET)
-  .upload(filePath, file, { upsert: true, cacheControl: '3600', contentType: file.type })
-
-console.log('UPLOAD ERROR DETAIL:', error, 'BUCKET:', PROPERTY_BUCKET, 'PATH:', filePath, 'FILE TYPE:', file.type)
-
-if (error) throw error
+    .from(AVATAR_BUCKET)
+    .upload(filePath, file, { upsert: true, cacheControl: '3600', contentType: file.type })
 
   if (error) throw error
 
@@ -499,7 +495,7 @@ export async function createProperty(payload) {
     bathrooms: Number(payload.bathrooms || 0),
     area: Number(payload.area || 0),
     property_type: payload.property_type,
-    status: payload.status || 'active',
+    status: payload.status || 'pending',
     images: asArray(payload.images),
   }
 
@@ -700,7 +696,7 @@ export async function fetchAdminStats() {
     supabase.from('properties').select('id', { count: 'exact', head: true }),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
     supabase.from('enquiries').select('id', { count: 'exact', head: true }),
-    supabase.from('broker_approvals').select('id', { count: 'exact', head: true }),
+    supabase.from('broker_approvals').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
   ])
 
   return {
