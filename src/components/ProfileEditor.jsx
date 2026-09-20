@@ -40,7 +40,8 @@ export default function ProfileEditor({ title = 'Profile', subtitle = 'Update yo
         phone: form.phone,
         city: form.city,
         bio: form.bio,
-      })
+        profile_picture: form.profile_picture,
+    });
       setMessage('Profile updated successfully.')
     } catch (err) {
       setError(err.message)

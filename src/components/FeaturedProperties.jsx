@@ -22,20 +22,20 @@ export default function FeaturedProperties() {
   const [selected, setSelected] = useState([])
   const [properties, setProperties] = useState([])
   const [loading, setLoading] = useState(true)
-useEffect(() => {
-  let mounted = true
-  fetchProperties({ status: 'active' })
-    .then((data) => {
-      console.log('FETCHED PROPERTIES:', data)
-      if (mounted) setProperties(data)
-    })
-    .catch((err) => {
-      console.error('FETCH PROPERTIES ERROR:', err)
-      if (mounted) setProperties([])
-    })
-    .finally(() => { if (mounted) setLoading(false) })
-  return () => { mounted = false }
-}, [])
+
+  useEffect(() => {
+    let mounted = true
+    fetchProperties({ status: 'active' })
+      .then((data) => {
+        if (mounted) setProperties(data || [])
+      })
+      .catch((err) => {
+        console.error('FETCH PROPERTIES ERROR:', err)
+        if (mounted) setProperties([])
+      })
+      .finally(() => { if (mounted) setLoading(false) })
+    return () => { mounted = false }
+  }, [])
 
   const filtered = useMemo(() => properties.filter((property) => {
     const budgetMatch = property.priceValue >= budget.min && property.priceValue <= budget.max
@@ -85,7 +85,11 @@ useEffect(() => {
           </select>
         </div>
 
-        {view === 'list' ? (
+        {loading ? (
+          <p className="py-10 text-center text-[#6B7280]">Loading properties...</p>
+        ) : filtered.length === 0 ? (
+          <p className="py-10 text-center text-[#6B7280]">No properties found.</p>
+        ) : view === 'list' ? (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
             {filtered.map((property) => (
               <PropertyCard key={property.id} property={property} selected={selected.includes(property.id)} onCompareToggle={toggleCompare} />
